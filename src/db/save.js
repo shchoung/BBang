@@ -1,21 +1,19 @@
 /**
- * 크롤링 결과를 PostGIS DB에 저장
- * - kakao_id 기준 UPSERT (중복 방지)
- * - ST_Distance로 30m 내 중복 빵집 감지
+ * 크롤링 결과 DB 저장 — PostGIS 없는 버전
+ * 중복 제거: kakao_id UNIQUE + Haversine 30m 체크
  */
+const { pool } = require('./pool');
 
-const { Pool } = require('pg');
+// 두 좌표 간 거리(m) 계산
+function distanceM(lat1, lng1, lat2, lng2) {
+  const R = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 +
+            Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLng/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-});
-
-/**
- * bakeries 테이블에 UPSERT
- * - kakao_id가 같으면 주소·전화번호 업데이트
- * - 없으면 INSERT (초기 레벨 1)
- */
 async function upsertBakeries(bakeries) {
   const client = await pool.connect();
   let inserted = 0, updated = 0, skipped = 0;
@@ -23,44 +21,39 @@ async function upsertBakeries(bakeries) {
   try {
     await client.query('BEGIN');
 
-    for (const b of bakeries) {
-      // 30m 반경 내 기존 데이터 확인 (공간 중복 체크)
-      const dupCheck = await client.query(
-        `SELECT id FROM bakeries
-         WHERE ST_DWithin(
-           geom,
-           ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography,
-           30
-         )
-         AND kakao_id IS DISTINCT FROM $3
-         LIMIT 1`,
-        [b.lng, b.lat, b.kakao_id]
-      );
+    // 기존 좌표 전부 캐시 (30m 중복 체크용, PostGIS 없이 메모리에서 처리)
+    const { rows: existing } = await client.query(`SELECT kakao_id, lat, lng FROM bakeries`);
+    const existingCoords = existing.map(r => ({
+      kakao_id: r.kakao_id,
+      lat: parseFloat(r.lat),
+      lng: parseFloat(r.lng),
+    }));
 
-      if (dupCheck.rows.length > 0) {
-        skipped++;
-        continue; // 30m 내 다른 출처 빵집 있으면 건너뜀
-      }
+    for (const b of bakeries) {
+      // 30m 내 다른 빵집 있으면 스킵 (kakao_id 다른 것만 체크)
+      const isDup = existingCoords.some(e =>
+        e.kakao_id !== b.kakao_id &&
+        distanceM(b.lat, b.lng, e.lat, e.lng) < 30
+      );
+      if (isDup) { skipped++; continue; }
 
       const res = await client.query(
-        `INSERT INTO bakeries
-           (kakao_id, name, address, phone, url, geom, category, source, crawled_at, level, level_score)
-         VALUES
-           ($1, $2, $3, $4, $5,
-            ST_SetSRID(ST_MakePoint($6, $7), 4326),
-            $8, $9, $10, 1, 0)
-         ON CONFLICT (kakao_id)
-         DO UPDATE SET
-           name       = EXCLUDED.name,
-           address    = EXCLUDED.address,
-           phone      = EXCLUDED.phone,
-           crawled_at = EXCLUDED.crawled_at
+        `INSERT INTO bakeries (kakao_id, name, address, phone, url, lat, lng, category, source, crawled_at, level, level_score)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, 1, 0)
+         ON CONFLICT (kakao_id) DO UPDATE SET
+           name=EXCLUDED.name, address=EXCLUDED.address,
+           phone=EXCLUDED.phone, crawled_at=EXCLUDED.crawled_at
          RETURNING (xmax = 0) AS is_insert`,
         [b.kakao_id, b.name, b.address, b.phone, b.url,
-         b.lng, b.lat, b.category, b.source, b.crawled_at]
+         b.lat, b.lng, b.category, b.source, b.crawled_at]
       );
 
-      res.rows[0].is_insert ? inserted++ : updated++;
+      if (res.rows[0].is_insert) {
+        inserted++;
+        existingCoords.push({ kakao_id: b.kakao_id, lat: b.lat, lng: b.lng });
+      } else {
+        updated++;
+      }
     }
 
     await client.query('COMMIT');
@@ -74,13 +67,10 @@ async function upsertBakeries(bakeries) {
   return { inserted, updated, skipped };
 }
 
-/**
- * 크롤링 이력 기록
- */
 async function logCrawlRun({ source, total, inserted, updated, skipped, error }) {
   await pool.query(
     `INSERT INTO crawl_logs (source, total, inserted, updated, skipped, error, ran_at)
-     VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+     VALUES ($1,$2,$3,$4,$5,$6,NOW())`,
     [source, total, inserted, updated, skipped, error || null]
   ).catch(err => console.error('로그 기록 실패:', err.message));
 }
