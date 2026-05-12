@@ -1,5 +1,5 @@
 /**
- * 빵친자 — 전국 카카오 로컬 API 크롤러
+ * 떡친자 — 전국 카카오 로컬 API 크롤러
  *
  * 전략: 한국 전역을 격자(grid)로 분할 → 각 격자 중심점에서 반경 10km 검색
  *   - 경도 125.0~129.6 / 위도 33.0~38.7 (제주 포함)
@@ -14,7 +14,7 @@
 const KAKAO_API_KEY = process.env.KAKAO_REST_API_KEY;
 const BASE_URL = 'https://dapi.kakao.com/v2/local/search/keyword.json';
 
-// ── 전국 주요 도시 중심 (고밀도 보완 탐색용) ─────────────────
+// ── 전국 주요 도시 중심 (고떡보의하루 보완 탐색용) ─────────────────
 const DENSE_CITIES = [
   // 특별·광역시
   { name:'서울',     x:126.9780, y:37.5665, r:15000 },
@@ -90,7 +90,7 @@ function buildGrid() {
 // ── API 단일 페이지 요청 ─────────────────────────────────────
 async function fetchPage(area, page = 1) {
   const params = new URLSearchParams({
-    query:               '베이커리',
+    query:               '떡집',
     category_group_code: 'FD6',
     x:                   area.x,
     y:                   area.y,
@@ -123,11 +123,11 @@ async function crawlGrid(area) {
   while (true) {
     const { documents, meta } = await fetchPage(area, page);
 
-    // 베이커리 필터
+    // 떡집 필터
     const filtered = documents.filter(doc =>
-      doc.category_name.includes('베이커리') ||
-      doc.category_name.includes('빵') ||
-      doc.place_name.match(/베이커리|브레드|빵집|제과|파티쉐|boulangerie/i)
+      doc.category_name.includes('떡') ||
+      doc.category_name.includes('방앗간') ||
+      doc.place_name.match(/떡집|떡방|방앗간|한과|찹쌀|인절미/i)
     );
     results.push(...filtered);
 
@@ -166,7 +166,7 @@ function normalize(doc, areaName) {
 async function crawlNationwide({ onProgress } = {}) {
   if (!KAKAO_API_KEY) throw new Error('KAKAO_REST_API_KEY 환경변수가 없습니다.');
 
-  // 격자 + 도심 고밀도 탐색 합산
+  // 격자 + 도심 고떡보의하루 탐색 합산
   const gridAreas  = buildGrid();
   const allAreas   = [...gridAreas, ...DENSE_CITIES];
 

@@ -1,5 +1,5 @@
 /**
- * 빵친자 크롤러 스케줄러 — 전국 버전
+ * 떡친자 크롤러 스케줄러 — 전국 버전
  *
  * 실행 방식:
  *   스케줄 모드: node src/crawler/scheduler.js
@@ -26,7 +26,7 @@ async function runCrawl(options = {}) {
   const startedAt = new Date();
   const label = citiesOnly ? '주요도시 빠른갱신' : '전국 크롤링';
 
-  console.log(`\n🍞 [${startedAt.toLocaleString('ko-KR')}] ${label} 시작`);
+  console.log(`\n🍡 [${startedAt.toLocaleString('ko-KR')}] ${label} 시작`);
   console.log('─'.repeat(60));
 
   let total = 0, inserted = 0, updated = 0, skipped = 0, errorMsg = null;
@@ -85,7 +85,7 @@ if (RUN_NOW) {
 
 // ── 스케줄 모드 ──────────────────────────────────────────────
 else {
-  console.log('🕐 빵친자 크롤러 스케줄러 (전국 모드)');
+  console.log('🕐 떡친자 크롤러 스케줄러 (전국 모드)');
   console.log('   전국 크롤링:   매주 월·목 새벽 2:00 KST');
   console.log('   도시 빠른갱신: 매일 새벽 4:00 KST');
   console.log('\n   수동 실행:');
