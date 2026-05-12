@@ -2,341 +2,464 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <title>빵친자 🍞</title>
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css">
   <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Noto Sans KR', sans-serif; background: #faf8f4; color: #2c2a26; }
 
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Noto Sans KR', sans-serif;
-      background: #faf8f4;
-      color: #2c2a26;
-    }
+    /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+       지도: 전체 화면
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+    #map { position: fixed; inset: 0; }
 
-    /* ── 헤더 ── */
+    /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+       헤더 (지도 위에 float)
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
     #header {
-      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
-      height: 56px;
-      background: #fff;
-      border-bottom: 1px solid #ece9e2;
-      display: flex; align-items: center; gap: 12px;
-      padding: 0 16px;
+      position: fixed; top: 0; left: 0; right: 0; z-index: 200;
+      padding: env(safe-area-inset-top, 0) 0 0;
     }
-    #header h1 { font-size: 18px; font-weight: 700; color: #c25c00; letter-spacing: -0.5px; }
-    #header .subtitle { font-size: 12px; color: #888; margin-top: 2px; }
-    #header .hd-left { display: flex; flex-direction: column; }
-    #header .hd-right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+    .header-bar {
+      height: 52px; background: #fff;
+      display: flex; align-items: center; gap: 10px; padding: 0 14px;
+      box-shadow: 0 1px 0 rgba(0,0,0,.08);
+    }
+    #header h1 { font-size: 17px; font-weight: 800; color: #c25c00; letter-spacing: -.5px; white-space: nowrap; }
+    #header .subtitle { font-size: 11px; color: #aaa; white-space: nowrap; }
+    #header .hd-left { display: flex; flex-direction: column; flex-shrink: 0; }
 
-    /* ── 레벨 필터 버튼 ── */
-    .filter-btn {
-      padding: 5px 12px; border-radius: 20px;
-      border: 1px solid #e0dcd5;
-      background: #fff; font-size: 12px; cursor: pointer;
-      color: #555; transition: all .15s;
-      white-space: nowrap;
+    /* 필터 스크롤 행 */
+    .filter-row {
+      background: #fff; border-bottom: 1px solid #ece9e2;
+      overflow-x: auto; display: flex; gap: 6px;
+      padding: 8px 14px; -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
     }
-    .filter-btn:hover { border-color: #c25c00; color: #c25c00; }
+    .filter-row::-webkit-scrollbar { display: none; }
+    .filter-btn {
+      padding: 5px 13px; border-radius: 20px; border: 1px solid #e0dcd5;
+      background: #fff; font-size: 12px; cursor: pointer; color: #555;
+      transition: all .15s; white-space: nowrap; flex-shrink: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
     .filter-btn.active { background: #c25c00; color: #fff; border-color: #c25c00; }
 
-    /* ── 지도 ── */
-    #map {
-      position: fixed;
-      top: 56px; left: 0; right: 340px; bottom: 0;
+    /* 헤더 총 높이 계산용 변수 */
+    :root {
+      --header-h: calc(52px + 37px + env(safe-area-inset-top, 0px));
     }
 
-    /* ── 사이드패널 ── */
-    #side {
-      position: fixed;
-      top: 56px; right: 0; bottom: 0; width: 340px;
+    /* MapLibre 컨트롤 위치 조정 */
+    .maplibregl-ctrl-bottom-right {
+      bottom: calc(env(safe-area-inset-bottom, 0px) + 280px) !important;
+    }
+
+    /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+       바텀시트 (모바일)
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+    #sheet {
+      position: fixed; left: 0; right: 0; bottom: 0; z-index: 300;
       background: #fff;
-      border-left: 1px solid #ece9e2;
-      overflow-y: auto;
+      border-radius: 18px 18px 0 0;
+      box-shadow: 0 -4px 24px rgba(0,0,0,.12);
       display: flex; flex-direction: column;
+      transition: transform .32s cubic-bezier(.4,0,.2,1);
+      /* 기본: 핸들 + 타이틀만 보임 (peek 상태) */
+      transform: translateY(calc(100% - 80px - env(safe-area-inset-bottom, 0px)));
+      max-height: 85vh;
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+    }
+    #sheet.open {
+      transform: translateY(0);
+    }
+    #sheet.detail {
+      transform: translateY(0);
     }
 
-    .side-title {
-      padding: 14px 16px 10px;
-      font-size: 13px; font-weight: 600; color: #888;
-      border-bottom: 1px solid #f0ede7;
-      display: flex; justify-content: space-between; align-items: center;
+    /* 핸들 */
+    .sheet-handle {
+      width: 36px; height: 4px; border-radius: 2px;
+      background: #ddd; margin: 10px auto 0; flex-shrink: 0; cursor: grab;
     }
-    .side-count { font-size: 12px; color: #c25c00; font-weight: 700; }
 
-    /* ── 빵집 카드 ── */
+    /* 바텀시트 타이틀 바 */
+    .sheet-title-bar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 16px 10px; cursor: pointer; flex-shrink: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .sheet-title { font-size: 13px; font-weight: 700; color: #333; }
+    .sheet-count { font-size: 12px; color: #c25c00; font-weight: 700; }
+    .sheet-toggle { font-size: 18px; color: #bbb; transition: transform .2s; }
+    #sheet.open .sheet-toggle { transform: rotate(180deg); }
+
+    /* 리스트 스크롤 영역 */
+    .sheet-body {
+      overflow-y: auto; flex: 1;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+       데스크탑: 사이드패널 모드
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+    @media (min-width: 768px) {
+      #map { right: 360px; }
+      #sheet {
+        left: auto; top: var(--header-h); right: 0; bottom: 0;
+        width: 360px; border-radius: 0; box-shadow: none;
+        transform: none !important;
+        border-left: 1px solid #ece9e2;
+        max-height: none;
+      }
+      .sheet-handle, .sheet-toggle { display: none; }
+      .sheet-title-bar { cursor: default; }
+      .maplibregl-ctrl-bottom-right { bottom: 20px !important; }
+    }
+
+    /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+       빵집 카드
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
     .bakery-card {
-      padding: 14px 16px;
-      border-bottom: 1px solid #f5f2ec;
-      cursor: pointer; transition: background .12s;
-      display: flex; gap: 12px; align-items: flex-start;
+      padding: 13px 16px; border-bottom: 1px solid #f5f2ec;
+      -webkit-tap-highlight-color: transparent;
     }
-    .bakery-card:hover { background: #fdf9f4; }
     .bakery-card.selected { background: #fff8f0; border-left: 3px solid #c25c00; }
-
+    .bakery-card-top { display: flex; gap: 12px; align-items: flex-start; cursor: pointer; }
     .bakery-icon {
-      width: 42px; height: 42px; border-radius: 12px;
+      width: 44px; height: 44px; border-radius: 12px;
       display: flex; align-items: center; justify-content: center;
-      font-size: 22px; flex-shrink: 0;
+      font-size: 24px; flex-shrink: 0;
     }
-
     .bakery-info { flex: 1; min-width: 0; }
-    .bakery-name { font-size: 14px; font-weight: 600; color: #1a1814; margin-bottom: 2px; }
-    .bakery-bread { font-size: 12px; color: #888; margin-bottom: 4px; }
+    .bakery-name { font-size: 15px; font-weight: 700; color: #1a1814; margin-bottom: 2px; }
+    .bakery-bread { font-size: 12px; color: #999; margin-bottom: 5px; }
     .bakery-meta { display: flex; gap: 8px; align-items: center; }
-    .rating { font-size: 12px; color: #f59e0b; font-weight: 600; }
-    .review-cnt { font-size: 11px; color: #aaa; }
-    .level-badge {
-      margin-left: auto;
-      font-size: 10px; font-weight: 700;
-      padding: 2px 7px; border-radius: 10px;
-    }
+    .rating { font-size: 12px; color: #f59e0b; font-weight: 700; }
+    .review-cnt { font-size: 11px; color: #bbb; }
+    .level-badge { margin-left: auto; font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 10px; }
 
-    /* ── 팝업 ── */
+    /* 길찾기 버튼 행 */
+    .nav-row { display: none; margin-top: 10px; gap: 6px; flex-wrap: wrap; }
+    .nav-row.open { display: flex; }
+    .nav-btn {
+      display: flex; align-items: center; gap: 5px;
+      padding: 7px 12px; border-radius: 10px; border: 1px solid #e8e4dc;
+      background: #faf8f4; font-size: 12px; color: #444;
+      text-decoration: none; white-space: nowrap;
+      -webkit-tap-highlight-color: transparent;
+      min-height: 36px; /* 터치 타겟 */
+    }
+    .nav-btn:active { background: #fff0e6; border-color: #c25c00; color: #c25c00; }
+    .nav-icon { font-size: 15px; }
+
+    /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+       팝업
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
     .maplibregl-popup-content {
-      border-radius: 12px !important;
-      padding: 0 !important;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.15) !important;
-      min-width: 220px;
+      border-radius: 14px !important; padding: 0 !important;
+      box-shadow: 0 4px 24px rgba(0,0,0,.18) !important;
+      min-width: 230px; max-width: 270px;
     }
-    .popup-inner { padding: 14px; }
-    .popup-name { font-size: 15px; font-weight: 700; color: #1a1814; margin-bottom: 4px; }
-    .popup-bread { font-size: 12px; color: #888; margin-bottom: 8px; }
-    .popup-score {
-      display: flex; align-items: center; gap: 6px;
-      font-size: 12px; color: #555;
+    .maplibregl-popup-close-button {
+      font-size: 18px !important; padding: 8px 10px !important;
+      line-height: 1 !important; color: #aaa !important;
     }
-    .score-bar-wrap {
-      flex: 1; height: 5px; background: #f0ede7; border-radius: 3px; overflow: hidden;
+    .popup-inner { padding: 14px 14px 10px; }
+    .popup-name { font-size: 15px; font-weight: 700; color: #1a1814; margin-bottom: 3px; padding-right: 20px; }
+    .popup-bread { font-size: 12px; color: #999; margin-bottom: 8px; }
+    .popup-score { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #666; margin-bottom: 6px; }
+    .score-bar-wrap { flex: 1; height: 4px; background: #f0ede7; border-radius: 2px; overflow: hidden; }
+    .score-bar { height: 100%; border-radius: 2px; background: #c25c00; }
+    .popup-level { font-size: 12px; font-weight: 600; margin-bottom: 10px; }
+    .popup-nav { border-top: 1px solid #f0ede7; padding: 10px 14px 12px; }
+    .popup-nav-title { font-size: 10px; color: #bbb; font-weight: 700; letter-spacing: .5px; margin-bottom: 7px; }
+    .popup-nav-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-bottom: 5px; }
+    .popup-nav-btn {
+      display: flex; align-items: center; justify-content: center; gap: 5px;
+      padding: 8px 4px; border-radius: 9px; border: 1px solid #ece9e2;
+      background: #faf8f4; font-size: 11px; font-weight: 500; color: #333;
+      text-decoration: none; min-height: 38px;
+      -webkit-tap-highlight-color: transparent;
     }
-    .score-bar { height: 100%; border-radius: 3px; background: #c25c00; }
-    .popup-level {
-      margin-top: 10px;
-      display: flex; align-items: center; gap: 6px;
-      font-size: 13px; font-weight: 600;
+    .popup-nav-btn:active { background: #fff0e6; border-color: #c25c00; color: #c25c00; }
+    .popup-nav-btn .ni { font-size: 16px; }
+    .popup-nav-apps { display: flex; gap: 5px; }
+    .popup-nav-app {
+      flex: 1; display: flex; align-items: center; justify-content: center; gap: 4px;
+      padding: 7px; border-radius: 9px; border: 1px solid #ece9e2;
+      background: #faf8f4; font-size: 11px; color: #555;
+      text-decoration: none; min-height: 36px;
+      -webkit-tap-highlight-color: transparent;
     }
+    .popup-nav-app:active { background: #f0ede7; }
 
-    /* 레벨 색상 시스템 */
+    /* 레벨 색상 */
     .lv1 { background: #faeeda; color: #854f0b; }
     .lv2 { background: #e1f5ee; color: #0f6e56; }
     .lv3 { background: #e6f1fb; color: #185fa5; }
     .lv4 { background: #faece7; color: #993c1d; }
     .lv5 { background: #eeedfe; color: #534ab7; }
 
-    /* ── 빈 상태 ── */
-    .empty { padding: 40px 16px; text-align: center; color: #bbb; font-size: 13px; }
+    .empty { padding: 40px 16px; text-align: center; color: #ccc; font-size: 13px; }
 
     /* 로딩 */
     #loading {
-      position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
+      position: fixed; inset: 0; z-index: 999;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(250,248,244,.9);
+    }
+    .loading-box {
       background: #fff; padding: 20px 28px; border-radius: 16px;
       box-shadow: 0 4px 24px rgba(0,0,0,.12);
-      font-size: 14px; color: #555; z-index: 999;
-      display: flex; align-items: center; gap: 10px;
+      display: flex; align-items: center; gap: 10px; font-size: 14px; color: #555;
     }
-    .spinner {
-      width: 18px; height: 18px;
-      border: 2px solid #f0ede7; border-top-color: #c25c00;
-      border-radius: 50%; animation: spin .7s linear infinite;
-    }
+    .spinner { width: 18px; height: 18px; border: 2px solid #f0ede7; border-top-color: #c25c00; border-radius: 50%; animation: spin .7s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
 <body>
 
-<div id="loading"><div class="spinner"></div> 빵집 불러오는 중...</div>
+<div id="loading"><div class="loading-box"><div class="spinner"></div> 빵집 불러오는 중...</div></div>
 
-<!-- 헤더 -->
+<!-- 헤더 (지도 위 float) -->
 <div id="header">
-  <div class="hd-left">
-    <h1>🍞 빵친자</h1>
-    <span class="subtitle">내 주변 빵 맛집 지도</span>
+  <div class="header-bar">
+    <div class="hd-left">
+      <h1>🍞 빵친자</h1>
+      <span class="subtitle">빵 맛집 지도</span>
+    </div>
   </div>
-  <div class="hd-right" id="filters">
-    <button class="filter-btn active" onclick="filterLevel(null, this)">전체</button>
-    <button class="filter-btn" onclick="filterLevel(5, this)">👑 빵신</button>
-    <button class="filter-btn" onclick="filterLevel(4, this)">🍞 빵달인</button>
-    <button class="filter-btn" onclick="filterLevel(3, this)">🧁 빵고수</button>
-    <button class="filter-btn" onclick="filterLevel(2, this)">🥐 빵순이</button>
-    <button class="filter-btn" onclick="filterLevel(1, this)">🥖 빵린이</button>
+  <div class="filter-row" id="filters">
+    <button class="filter-btn active" onclick="filterLevel(null,this)">전체</button>
+    <button class="filter-btn" onclick="filterLevel(5,this)">👑 빵신</button>
+    <button class="filter-btn" onclick="filterLevel(4,this)">🍞 빵달인</button>
+    <button class="filter-btn" onclick="filterLevel(3,this)">🧁 빵고수</button>
+    <button class="filter-btn" onclick="filterLevel(2,this)">🥐 빵순이</button>
+    <button class="filter-btn" onclick="filterLevel(1,this)">🥖 빵린이</button>
   </div>
 </div>
 
 <!-- 지도 -->
 <div id="map"></div>
 
-<!-- 사이드패널 -->
-<div id="side">
-  <div class="side-title">
-    <span>빵집 목록</span>
-    <span class="side-count" id="cnt">0곳</span>
+<!-- 바텀시트 / 사이드패널 -->
+<div id="sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-title-bar" onclick="toggleSheet()">
+    <span class="sheet-title">빵집 목록</span>
+    <span class="sheet-count" id="cnt">0곳</span>
+    <span class="sheet-toggle">⌃</span>
   </div>
-  <div id="bakery-list"></div>
+  <div class="sheet-body">
+    <div id="bakery-list"></div>
+  </div>
 </div>
 
 <script>
 const LEVEL_META = {
-  1: { icon: '🥖', color: '#854f0b', bg: '#faeeda', name: '빵린이' },
-  2: { icon: '🥐', color: '#0f6e56', bg: '#e1f5ee', name: '빵순이' },
-  3: { icon: '🧁', color: '#185fa5', bg: '#e6f1fb', name: '빵고수' },
-  4: { icon: '🍞', color: '#993c1d', bg: '#faece7', name: '빵달인' },
-  5: { icon: '👑', color: '#534ab7', bg: '#eeedfe', name: '빵신'   },
+  1:{icon:'🥖',color:'#854f0b',bg:'#faeeda',name:'빵린이'},
+  2:{icon:'🥐',color:'#0f6e56',bg:'#e1f5ee',name:'빵순이'},
+  3:{icon:'🧁',color:'#185fa5',bg:'#e6f1fb',name:'빵고수'},
+  4:{icon:'🍞',color:'#993c1d',bg:'#faece7',name:'빵달인'},
+  5:{icon:'👑',color:'#534ab7',bg:'#eeedfe',name:'빵신'},
 };
 
-let map, allBakeries = [], markers = [], currentFilter = null, selectedId = null;
+let map, allBakeries=[], markers=[], selectedId=null;
 
-// 지도 초기화
+// ── 바텀시트 토글 ────────────────────────────────────────────
+const sheet = document.getElementById('sheet');
+let sheetOpen = false;
+function toggleSheet() {
+  sheetOpen = !sheetOpen;
+  sheet.classList.toggle('open', sheetOpen);
+}
+
+// 스와이프로 바텀시트 열고 닫기
+let touchStartY = 0;
+sheet.addEventListener('touchstart', e => { touchStartY = e.touches[0].clientY; }, { passive: true });
+sheet.addEventListener('touchend', e => {
+  const dy = e.changedTouches[0].clientY - touchStartY;
+  if (dy < -40) { sheetOpen = true;  sheet.classList.add('open'); }
+  if (dy >  40) { sheetOpen = false; sheet.classList.remove('open'); }
+}, { passive: true });
+
+// ── 길찾기 URL ───────────────────────────────────────────────
+function navUrls(b) {
+  const name = encodeURIComponent(b.name);
+  const { lat, lng } = b;
+  return {
+    car:     `https://map.kakao.com/link/to/${name},${lat},${lng}/car`,
+    transit: `https://map.kakao.com/link/to/${name},${lat},${lng}/public`,
+    walk:    `https://map.kakao.com/link/to/${name},${lat},${lng}/walk`,
+    bike:    `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=bicycling`,
+    kakao:   `https://map.kakao.com/link/to/${name},${lat},${lng}`,
+    naver:   `https://map.naver.com/p/search/${name}/@${lng},${lat},15z`,
+  };
+}
+
+// ── 팝업 HTML ────────────────────────────────────────────────
+function popupHTML(b, m) {
+  const u = navUrls(b);
+  return `
+    <div class="popup-inner">
+      <div class="popup-name">${m.icon} ${b.name}</div>
+      <div class="popup-bread">대표 빵 · ${b.representative_bread}</div>
+      <div class="popup-score">
+        <span>⭐ ${b.rating}</span>
+        <div class="score-bar-wrap"><div class="score-bar" style="width:${b.level_score}%"></div></div>
+        <span>${b.level_score}점</span>
+      </div>
+      <div class="popup-level" style="color:${m.color}">${m.icon} ${m.name} · 후기 ${b.review_count}개</div>
+    </div>
+    <div class="popup-nav">
+      <div class="popup-nav-title">길찾기</div>
+      <div class="popup-nav-grid">
+        <a class="popup-nav-btn" href="${u.car}"     target="_blank" rel="noopener"><span class="ni">🚗</span>자동차</a>
+        <a class="popup-nav-btn" href="${u.transit}" target="_blank" rel="noopener"><span class="ni">🚌</span>대중교통</a>
+        <a class="popup-nav-btn" href="${u.walk}"    target="_blank" rel="noopener"><span class="ni">🚶</span>도보</a>
+        <a class="popup-nav-btn" href="${u.bike}"    target="_blank" rel="noopener"><span class="ni">🚴</span>자전거</a>
+      </div>
+      <div class="popup-nav-apps">
+        <a class="popup-nav-app" href="${u.kakao}" target="_blank" rel="noopener">🗺 카카오맵</a>
+        <a class="popup-nav-app" href="${u.naver}" target="_blank" rel="noopener">🗺 네이버지도</a>
+      </div>
+    </div>`;
+}
+
+// ── 지도 초기화 ──────────────────────────────────────────────
+const headerH = document.getElementById('header').offsetHeight;
 map = new maplibregl.Map({
   container: 'map',
   style: {
-    version: 8,
-    sources: {
-      'osm': {
-        type: 'raster',
-        tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-        tileSize: 256,
-        attribution: '© OpenStreetMap contributors'
-      }
-    },
-    layers: [{ id: 'osm', type: 'raster', source: 'osm' }]
+    version:8,
+    sources:{osm:{type:'raster',tiles:['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],tileSize:256,attribution:'© OpenStreetMap contributors'}},
+    layers:[{id:'osm',type:'raster',source:'osm'}]
   },
-  center: [127.0016, 37.5665],
-  zoom: 11.5,
-  attributionControl: false
+  center:[127.0016,37.5665], zoom:11.5, attributionControl:false
 });
 
 map.addControl(new maplibregl.NavigationControl(), 'bottom-right');
-map.addControl(new maplibregl.GeolocateControl({
-  positionOptions: { enableHighAccuracy: true },
-  trackUserLocation: true
-}), 'bottom-right');
+const geo = new maplibregl.GeolocateControl({ positionOptions:{enableHighAccuracy:true}, trackUserLocation:true });
+map.addControl(geo, 'bottom-right');
 
-map.on('load', () => loadBakeries());
+// 지도 탭하면 시트 닫기
+map.on('click', () => { sheetOpen=false; sheet.classList.remove('open'); });
+map.on('load', loadBakeries);
 
-// 빵집 데이터 로드
+// ── 데이터 로드 ──────────────────────────────────────────────
 async function loadBakeries() {
   try {
-    const res = await fetch('/api/bakeries');
+    const res  = await fetch('/api/bakeries');
     const json = await res.json();
     allBakeries = json.data;
     renderAll(allBakeries);
     document.getElementById('loading').style.display = 'none';
-  } catch (e) {
-    document.getElementById('loading').innerHTML = '데이터 로드 실패 😢';
+  } catch(e) {
+    document.querySelector('.loading-box').textContent = '데이터 로드 실패 😢';
   }
 }
 
-// 전체 렌더
-function renderAll(bakeries) {
+function renderAll(list) {
   clearMarkers();
-  renderMarkers(bakeries);
-  renderList(bakeries);
-  document.getElementById('cnt').textContent = `${bakeries.length}곳`;
+  renderMarkers(list);
+  renderList(list);
+  document.getElementById('cnt').textContent = `${list.length}곳`;
 }
 
-// 마커 생성
-function renderMarkers(bakeries) {
-  bakeries.forEach(b => {
+// ── 마커 ─────────────────────────────────────────────────────
+function renderMarkers(list) {
+  list.forEach(b => {
     const m = LEVEL_META[b.level];
     const el = document.createElement('div');
-    el.style.cssText = `
-      width:40px;height:40px;border-radius:50%;
-      background:${m.bg};border:2.5px solid ${m.color};
-      display:flex;align-items:center;justify-content:center;
-      font-size:20px;cursor:pointer;
-      transition:transform .15s;
-      box-shadow:0 2px 8px rgba(0,0,0,.18);
-    `;
+    el.style.cssText = `width:40px;height:40px;border-radius:50%;background:${m.bg};border:2.5px solid ${m.color};display:flex;align-items:center;justify-content:center;font-size:20px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.2);`;
     el.textContent = m.icon;
-    el.title = b.name;
 
-    el.addEventListener('mouseenter', () => el.style.transform = 'scale(1.2)');
-    el.addEventListener('mouseleave', () => el.style.transform = 'scale(1)');
+    const popup = new maplibregl.Popup({ offset:25, closeButton:true, maxWidth:'270px' })
+      .setHTML(popupHTML(b, m));
 
-    const popup = new maplibregl.Popup({ offset: 25, closeButton: false })
-      .setHTML(`
-        <div class="popup-inner">
-          <div class="popup-name">${m.icon} ${b.name}</div>
-          <div class="popup-bread">대표 빵: ${b.representative_bread}</div>
-          <div class="popup-score">
-            <span>⭐ ${b.rating}</span>
-            <div class="score-bar-wrap"><div class="score-bar" style="width:${b.level_score}%"></div></div>
-            <span>${b.level_score}점</span>
-          </div>
-          <div class="popup-level" style="color:${m.color}">
-            ${m.icon} ${m.name} · 후기 ${b.review_count}개
-          </div>
-        </div>
-      `);
-
-    const marker = new maplibregl.Marker({ element: el })
-      .setLngLat([b.lng, b.lat])
+    const marker = new maplibregl.Marker({element:el})
+      .setLngLat([b.lng,b.lat])
       .setPopup(popup)
       .addTo(map);
 
-    el.addEventListener('click', () => selectBakery(b.id));
-    markers.push({ id: b.id, marker });
+    el.addEventListener('click', e => { e.stopPropagation(); selectBakery(b.id, false); });
+    markers.push({id:b.id, marker});
   });
 }
 
-// 사이드 리스트
-function renderList(bakeries) {
-  const list = document.getElementById('bakery-list');
-  if (!bakeries.length) {
-    list.innerHTML = '<div class="empty">해당 레벨의 빵집이 없어요 🥺</div>';
-    return;
-  }
-  const sorted = [...bakeries].sort((a, b) => b.level_score - a.level_score);
-  list.innerHTML = sorted.map(b => {
+// ── 사이드/바텀 리스트 ───────────────────────────────────────
+function renderList(list) {
+  const el = document.getElementById('bakery-list');
+  if (!list.length) { el.innerHTML='<div class="empty">빵집이 없어요 🥺</div>'; return; }
+  const sorted = [...list].sort((a,b) => b.level_score - a.level_score);
+  el.innerHTML = sorted.map(b => {
     const m = LEVEL_META[b.level];
+    const u = navUrls(b);
     return `
-      <div class="bakery-card ${selectedId === b.id ? 'selected' : ''}" id="card-${b.id}" onclick="selectBakery('${b.id}')">
-        <div class="bakery-icon" style="background:${m.bg}">${m.icon}</div>
-        <div class="bakery-info">
-          <div class="bakery-name">${b.name}</div>
-          <div class="bakery-bread">${b.representative_bread}</div>
-          <div class="bakery-meta">
-            <span class="rating">★ ${b.rating}</span>
-            <span class="review-cnt">후기 ${b.review_count}개</span>
-            <span class="level-badge lv${b.level}">${m.name}</span>
+      <div class="bakery-card ${selectedId===b.id?'selected':''}" id="card-${b.id}">
+        <div class="bakery-card-top" onclick="selectBakery('${b.id}',true)">
+          <div class="bakery-icon" style="background:${m.bg}">${m.icon}</div>
+          <div class="bakery-info">
+            <div class="bakery-name">${b.name}</div>
+            <div class="bakery-bread">${b.representative_bread}</div>
+            <div class="bakery-meta">
+              <span class="rating">★ ${b.rating}</span>
+              <span class="review-cnt">후기 ${b.review_count}개</span>
+              <span class="level-badge lv${b.level}">${m.name}</span>
+            </div>
           </div>
         </div>
-      </div>
-    `;
+        <div class="nav-row" id="nav-${b.id}">
+          <a class="nav-btn" href="${u.car}"     target="_blank" rel="noopener"><span class="nav-icon">🚗</span>자동차</a>
+          <a class="nav-btn" href="${u.transit}" target="_blank" rel="noopener"><span class="nav-icon">🚌</span>대중교통</a>
+          <a class="nav-btn" href="${u.walk}"    target="_blank" rel="noopener"><span class="nav-icon">🚶</span>도보</a>
+          <a class="nav-btn" href="${u.bike}"    target="_blank" rel="noopener"><span class="nav-icon">🚴</span>자전거</a>
+        </div>
+      </div>`;
   }).join('');
 }
 
-// 빵집 선택
-function selectBakery(id) {
+// ── 빵집 선택 ────────────────────────────────────────────────
+function selectBakery(id, fromList=false) {
+  const prev = selectedId;
   selectedId = id;
-  const bakery = allBakeries.find(b => b.id === id);
-  if (!bakery) return;
+  const b = allBakeries.find(x => x.id===id);
+  if (!b) return;
 
-  // 지도 이동 + 팝업 열기
-  map.flyTo({ center: [bakery.lng, bakery.lat], zoom: 15, speed: 1.2 });
-  const m = markers.find(m => m.id === id);
-  if (m) m.marker.togglePopup();
+  // 지도 이동 + 팝업
+  map.flyTo({center:[b.lng,b.lat], zoom:15, speed:1.2});
+  const mObj = markers.find(x => x.id===id);
+  if (mObj && !mObj.marker.getPopup().isOpen()) mObj.marker.togglePopup();
 
-  // 카드 하이라이트
-  document.querySelectorAll('.bakery-card').forEach(el => el.classList.remove('selected'));
+  // 카드 선택 + 길찾기 토글
+  document.querySelectorAll('.bakery-card').forEach(c => c.classList.remove('selected'));
+  document.querySelectorAll('.nav-row').forEach(r => r.classList.remove('open'));
   const card = document.getElementById(`card-${id}`);
-  if (card) { card.classList.add('selected'); card.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
+  if (card) { card.classList.add('selected'); card.scrollIntoView({behavior:'smooth',block:'nearest'}); }
+  if (prev !== id) document.getElementById(`nav-${id}`)?.classList.add('open');
+
+  // 모바일: 리스트에서 선택했으면 시트 살짝 접기 (지도 보이게)
+  if (fromList && window.innerWidth < 768) {
+    sheetOpen = false;
+    sheet.classList.remove('open');
+  }
 }
 
-// 레벨 필터
+// ── 레벨 필터 ────────────────────────────────────────────────
 function filterLevel(level, btn) {
-  currentFilter = level;
   document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
-  const filtered = level ? allBakeries.filter(b => b.level === level) : allBakeries;
-  renderAll(filtered);
+  renderAll(level ? allBakeries.filter(b=>b.level===level) : allBakeries);
 }
 
-// 마커 클리어
-function clearMarkers() {
-  markers.forEach(({ marker }) => marker.remove());
-  markers = [];
-}
+function clearMarkers() { markers.forEach(({marker})=>marker.remove()); markers=[]; }
 </script>
 </body>
 </html>
