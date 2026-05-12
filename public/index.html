@@ -1,1 +1,344 @@
 
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>빵친자 🍞</title>
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css">
+  <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Noto Sans KR', sans-serif;
+      background: #faf8f4;
+      color: #2c2a26;
+    }
+
+    /* ── 헤더 ── */
+    #header {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      height: 56px;
+      background: #fff;
+      border-bottom: 1px solid #ece9e2;
+      display: flex; align-items: center; gap: 12px;
+      padding: 0 16px;
+    }
+    #header h1 { font-size: 18px; font-weight: 700; color: #c25c00; letter-spacing: -0.5px; }
+    #header .subtitle { font-size: 12px; color: #888; margin-top: 2px; }
+    #header .hd-left { display: flex; flex-direction: column; }
+    #header .hd-right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+
+    /* ── 레벨 필터 버튼 ── */
+    .filter-btn {
+      padding: 5px 12px; border-radius: 20px;
+      border: 1px solid #e0dcd5;
+      background: #fff; font-size: 12px; cursor: pointer;
+      color: #555; transition: all .15s;
+      white-space: nowrap;
+    }
+    .filter-btn:hover { border-color: #c25c00; color: #c25c00; }
+    .filter-btn.active { background: #c25c00; color: #fff; border-color: #c25c00; }
+
+    /* ── 지도 ── */
+    #map {
+      position: fixed;
+      top: 56px; left: 0; right: 340px; bottom: 0;
+    }
+
+    /* ── 사이드패널 ── */
+    #side {
+      position: fixed;
+      top: 56px; right: 0; bottom: 0; width: 340px;
+      background: #fff;
+      border-left: 1px solid #ece9e2;
+      overflow-y: auto;
+      display: flex; flex-direction: column;
+    }
+
+    .side-title {
+      padding: 14px 16px 10px;
+      font-size: 13px; font-weight: 600; color: #888;
+      border-bottom: 1px solid #f0ede7;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .side-count { font-size: 12px; color: #c25c00; font-weight: 700; }
+
+    /* ── 빵집 카드 ── */
+    .bakery-card {
+      padding: 14px 16px;
+      border-bottom: 1px solid #f5f2ec;
+      cursor: pointer; transition: background .12s;
+      display: flex; gap: 12px; align-items: flex-start;
+    }
+    .bakery-card:hover { background: #fdf9f4; }
+    .bakery-card.selected { background: #fff8f0; border-left: 3px solid #c25c00; }
+
+    .bakery-icon {
+      width: 42px; height: 42px; border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px; flex-shrink: 0;
+    }
+
+    .bakery-info { flex: 1; min-width: 0; }
+    .bakery-name { font-size: 14px; font-weight: 600; color: #1a1814; margin-bottom: 2px; }
+    .bakery-bread { font-size: 12px; color: #888; margin-bottom: 4px; }
+    .bakery-meta { display: flex; gap: 8px; align-items: center; }
+    .rating { font-size: 12px; color: #f59e0b; font-weight: 600; }
+    .review-cnt { font-size: 11px; color: #aaa; }
+    .level-badge {
+      margin-left: auto;
+      font-size: 10px; font-weight: 700;
+      padding: 2px 7px; border-radius: 10px;
+    }
+
+    /* ── 팝업 ── */
+    .maplibregl-popup-content {
+      border-radius: 12px !important;
+      padding: 0 !important;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.15) !important;
+      min-width: 220px;
+    }
+    .popup-inner { padding: 14px; }
+    .popup-name { font-size: 15px; font-weight: 700; color: #1a1814; margin-bottom: 4px; }
+    .popup-bread { font-size: 12px; color: #888; margin-bottom: 8px; }
+    .popup-score {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 12px; color: #555;
+    }
+    .score-bar-wrap {
+      flex: 1; height: 5px; background: #f0ede7; border-radius: 3px; overflow: hidden;
+    }
+    .score-bar { height: 100%; border-radius: 3px; background: #c25c00; }
+    .popup-level {
+      margin-top: 10px;
+      display: flex; align-items: center; gap: 6px;
+      font-size: 13px; font-weight: 600;
+    }
+
+    /* 레벨 색상 시스템 */
+    .lv1 { background: #faeeda; color: #854f0b; }
+    .lv2 { background: #e1f5ee; color: #0f6e56; }
+    .lv3 { background: #e6f1fb; color: #185fa5; }
+    .lv4 { background: #faece7; color: #993c1d; }
+    .lv5 { background: #eeedfe; color: #534ab7; }
+
+    /* ── 빈 상태 ── */
+    .empty { padding: 40px 16px; text-align: center; color: #bbb; font-size: 13px; }
+
+    /* 로딩 */
+    #loading {
+      position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
+      background: #fff; padding: 20px 28px; border-radius: 16px;
+      box-shadow: 0 4px 24px rgba(0,0,0,.12);
+      font-size: 14px; color: #555; z-index: 999;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .spinner {
+      width: 18px; height: 18px;
+      border: 2px solid #f0ede7; border-top-color: #c25c00;
+      border-radius: 50%; animation: spin .7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+<div id="loading"><div class="spinner"></div> 빵집 불러오는 중...</div>
+
+<!-- 헤더 -->
+<div id="header">
+  <div class="hd-left">
+    <h1>🍞 빵친자</h1>
+    <span class="subtitle">내 주변 빵 맛집 지도</span>
+  </div>
+  <div class="hd-right" id="filters">
+    <button class="filter-btn active" onclick="filterLevel(null, this)">전체</button>
+    <button class="filter-btn" onclick="filterLevel(5, this)">👑 빵신</button>
+    <button class="filter-btn" onclick="filterLevel(4, this)">🍞 빵달인</button>
+    <button class="filter-btn" onclick="filterLevel(3, this)">🧁 빵고수</button>
+    <button class="filter-btn" onclick="filterLevel(2, this)">🥐 빵순이</button>
+    <button class="filter-btn" onclick="filterLevel(1, this)">🥖 빵린이</button>
+  </div>
+</div>
+
+<!-- 지도 -->
+<div id="map"></div>
+
+<!-- 사이드패널 -->
+<div id="side">
+  <div class="side-title">
+    <span>빵집 목록</span>
+    <span class="side-count" id="cnt">0곳</span>
+  </div>
+  <div id="bakery-list"></div>
+</div>
+
+<script>
+const LEVEL_META = {
+  1: { icon: '🥖', color: '#854f0b', bg: '#faeeda', name: '빵린이' },
+  2: { icon: '🥐', color: '#0f6e56', bg: '#e1f5ee', name: '빵순이' },
+  3: { icon: '🧁', color: '#185fa5', bg: '#e6f1fb', name: '빵고수' },
+  4: { icon: '🍞', color: '#993c1d', bg: '#faece7', name: '빵달인' },
+  5: { icon: '👑', color: '#534ab7', bg: '#eeedfe', name: '빵신'   },
+};
+
+let map, allBakeries = [], markers = [], currentFilter = null, selectedId = null;
+
+// 지도 초기화
+map = new maplibregl.Map({
+  container: 'map',
+  style: {
+    version: 8,
+    sources: {
+      'osm': {
+        type: 'raster',
+        tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+        tileSize: 256,
+        attribution: '© OpenStreetMap contributors'
+      }
+    },
+    layers: [{ id: 'osm', type: 'raster', source: 'osm' }]
+  },
+  center: [127.0016, 37.5665],
+  zoom: 11.5,
+  attributionControl: false
+});
+
+map.addControl(new maplibregl.NavigationControl(), 'bottom-right');
+map.addControl(new maplibregl.GeolocateControl({
+  positionOptions: { enableHighAccuracy: true },
+  trackUserLocation: true
+}), 'bottom-right');
+
+map.on('load', () => loadBakeries());
+
+// 빵집 데이터 로드
+async function loadBakeries() {
+  try {
+    const res = await fetch('/api/bakeries');
+    const json = await res.json();
+    allBakeries = json.data;
+    renderAll(allBakeries);
+    document.getElementById('loading').style.display = 'none';
+  } catch (e) {
+    document.getElementById('loading').innerHTML = '데이터 로드 실패 😢';
+  }
+}
+
+// 전체 렌더
+function renderAll(bakeries) {
+  clearMarkers();
+  renderMarkers(bakeries);
+  renderList(bakeries);
+  document.getElementById('cnt').textContent = `${bakeries.length}곳`;
+}
+
+// 마커 생성
+function renderMarkers(bakeries) {
+  bakeries.forEach(b => {
+    const m = LEVEL_META[b.level];
+    const el = document.createElement('div');
+    el.style.cssText = `
+      width:40px;height:40px;border-radius:50%;
+      background:${m.bg};border:2.5px solid ${m.color};
+      display:flex;align-items:center;justify-content:center;
+      font-size:20px;cursor:pointer;
+      transition:transform .15s;
+      box-shadow:0 2px 8px rgba(0,0,0,.18);
+    `;
+    el.textContent = m.icon;
+    el.title = b.name;
+
+    el.addEventListener('mouseenter', () => el.style.transform = 'scale(1.2)');
+    el.addEventListener('mouseleave', () => el.style.transform = 'scale(1)');
+
+    const popup = new maplibregl.Popup({ offset: 25, closeButton: false })
+      .setHTML(`
+        <div class="popup-inner">
+          <div class="popup-name">${m.icon} ${b.name}</div>
+          <div class="popup-bread">대표 빵: ${b.representative_bread}</div>
+          <div class="popup-score">
+            <span>⭐ ${b.rating}</span>
+            <div class="score-bar-wrap"><div class="score-bar" style="width:${b.level_score}%"></div></div>
+            <span>${b.level_score}점</span>
+          </div>
+          <div class="popup-level" style="color:${m.color}">
+            ${m.icon} ${m.name} · 후기 ${b.review_count}개
+          </div>
+        </div>
+      `);
+
+    const marker = new maplibregl.Marker({ element: el })
+      .setLngLat([b.lng, b.lat])
+      .setPopup(popup)
+      .addTo(map);
+
+    el.addEventListener('click', () => selectBakery(b.id));
+    markers.push({ id: b.id, marker });
+  });
+}
+
+// 사이드 리스트
+function renderList(bakeries) {
+  const list = document.getElementById('bakery-list');
+  if (!bakeries.length) {
+    list.innerHTML = '<div class="empty">해당 레벨의 빵집이 없어요 🥺</div>';
+    return;
+  }
+  const sorted = [...bakeries].sort((a, b) => b.level_score - a.level_score);
+  list.innerHTML = sorted.map(b => {
+    const m = LEVEL_META[b.level];
+    return `
+      <div class="bakery-card ${selectedId === b.id ? 'selected' : ''}" id="card-${b.id}" onclick="selectBakery('${b.id}')">
+        <div class="bakery-icon" style="background:${m.bg}">${m.icon}</div>
+        <div class="bakery-info">
+          <div class="bakery-name">${b.name}</div>
+          <div class="bakery-bread">${b.representative_bread}</div>
+          <div class="bakery-meta">
+            <span class="rating">★ ${b.rating}</span>
+            <span class="review-cnt">후기 ${b.review_count}개</span>
+            <span class="level-badge lv${b.level}">${m.name}</span>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// 빵집 선택
+function selectBakery(id) {
+  selectedId = id;
+  const bakery = allBakeries.find(b => b.id === id);
+  if (!bakery) return;
+
+  // 지도 이동 + 팝업 열기
+  map.flyTo({ center: [bakery.lng, bakery.lat], zoom: 15, speed: 1.2 });
+  const m = markers.find(m => m.id === id);
+  if (m) m.marker.togglePopup();
+
+  // 카드 하이라이트
+  document.querySelectorAll('.bakery-card').forEach(el => el.classList.remove('selected'));
+  const card = document.getElementById(`card-${id}`);
+  if (card) { card.classList.add('selected'); card.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
+}
+
+// 레벨 필터
+function filterLevel(level, btn) {
+  currentFilter = level;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const filtered = level ? allBakeries.filter(b => b.level === level) : allBakeries;
+  renderAll(filtered);
+}
+
+// 마커 클리어
+function clearMarkers() {
+  markers.forEach(({ marker }) => marker.remove());
+  markers = [];
+}
+</script>
+</body>
+</html>
+
